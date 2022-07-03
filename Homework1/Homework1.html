@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Homework1 Pignata Giovanni 1913547</title>
+    <style>
+        body {
+          background-color: black;
+          color: white;
+        }
+        .button {
+          background-color: #008CBA; /* Blue */
+          border: none;
+          color: white;
+          padding: 4px 8px;
+          text-align: center;
+          text-decoration: none;
+          display: inline-block;
+          font-size: 16px;
+          margin: 4px 2px;
+          cursor: pointer;
+        }
+        .button2 {background-color: #4CAF50;} /* Green */
+        .button3 {background-color: #f44336;} /* Red */
+        .button4 {background-color: #e7e7e7; color: black;} /* Gray */
+        .button5 {background-color: #555555;} /* Black */
+    </style>
+  </head>
+
+  <body>
+    <canvas id="gl-canvas" width="800" height="600"></canvas>
+    <br>
+    <label for="Axis">Choose a Rotation Axis:</label>
+    <select name="Axis" id="Axis">
+      <option value="0">X</option>
+      <option value="1">Y</option>
+      <option value="2">Z</option>
+    </select>
+    <button id = "ButtonT" title = "OFF">Rotation</button>
+    <br>
+Turn on and off the Lights:
+    <button class = "button button3" id = "ButtonR">Red</button>
+    <button class = "button button2" id = "ButtonG">Green</button>
+    <button class = "button" id = "ButtonB">Blu</button>
+    <br><br>
+    Choose type of shading:
+    <label for="shading">Choose a Rotation Axis:</label>
+    <select name="shading" id="shading">
+      <option value="0">Fragment Shading</option>
+      <option value="1">Vertex Shading</option>
+
+    </select>
+    <br>
+Enable/Disable Texture:
+    <button id = "ButtonTex" title = "OFF">Texture</button>
+    <br><br>
+Viewing Volume settings:
+    <br>
+    <label for="fovySlider">Field of View (between 10 and 120):</label>
+    <input type="range" id="fovySlider" min="10" max="90" step="5" value="60"/>
+    <br>
+    <label for="zNearSlider"> zNear (between 0.1 and 3):</label>
+    <input type="range" id="zNearSlider" min="0.1" max="1" step="0.1" value="0.1"/>
+    <br>
+    <label for="zFarSlider"> zFar (between 3 and 10):</label>
+    <input type="range" id="zFarSlider" min="1" max="10" step="0.5" value="6"/>
+    <br><br>
+Camera Settings:
+    <br>
+    <label for="radius">Distance from Origin(between 0 and 10):</label>
+    <input type="range" id="radius" min="0" max="10" step="0.5" value="5"/>
+    <br>
+    <label for="beta">Beta angle (between -90 and 90):</label>
+    <input type="range" id="beta" min="-90" max="90" step="1" value="0"/>
+    <br>
+    <label for="phi"> Phi angle (between -90 and 90):</label>
+    <input type="range" id="phi" min="-90" max="90" step="1" value="0"/>
+    <br><br>
+
+<script id="vertex-shader" type="x-shader/x-vertex">
+  #version 300 es
+
+  struct MaterialProperties {
+    vec4 ambientColor;
+    vec4 diffuseColor;
+    vec4 specularColor;
+    vec4 emissiveColor;     // emissiveColor.a is alpha for the fragment
+    float shininess;
+  };
+
+  struct LightProperties {
+    bool enabled;
+    vec4 position;
+    vec4 ambientColor;
+    vec4 diffuseColor;
+    vec4 specularColor;
+  };
+
+  in vec4 aPosition;
+  in vec3 aNormal;
+  in vec3 aTangent;                         //
+  in vec2 aTexCoord;                        //
+
+  out vec4 vColor;
+  out vec2 vTexCoord;
+  out vec3 L[3],V,N;
+
+  uniform mat4 uModelViewMatrix;
+  uniform mat4 uProjectionMatrix;
+  uniform mat3 uNormalMatrix;               //
+  uniform MaterialProperties uMaterial;
+  uniform LightProperties uLights[3];
+  uniform bool uTexEnabled;
+  uniform bool uVertexShading;
+
+  void main() {
+    gl_Position = uProjectionMatrix * uModelViewMatrix *aPosition;
+    vTexCoord = aTexCoord;
+    vec4 color = uMaterial.emissiveColor;
+
+    vec3 pos = (uModelViewMatrix * aPosition).xyz;
+    vec4 NN = vec4(aNormal,0);
+    vec3 T  = normalize(uNormalMatrix*aTangent);
+    vec3 M = normalize(uNormalMatrix*aNormal);
+    vec3 B = cross(M, T);
+    if(uTexEnabled){
+      V.x = dot(T, -pos);
+      V.y = dot(B, -pos);
+      V.z = dot(M, -pos);
+      V = normalize(V);
+    }
+
+    else{
+        V = normalize(-pos); // Normalized viewer direction.
+    }
+    N = normalize((uModelViewMatrix*NN).xyz);   // Normalized normal direction.
+
+//  Compute Lighting..
+    for(int i = 0; i<3; i++){
+        if(uLights[i].enabled){
+          vec3 light = uLights[i].position.xyz;
+          if(uTexEnabled){
+            L[i].x = dot(T, light-pos);
+            L[i].y = dot(B, light-pos);
+            L[i].z = dot(M, light-pos);
+            L[i] = normalize(L[i]);
+          }
+          else {
+            L[i] = normalize(light - pos);    // Normalized source direction.
+            if(uVertexShading){
+//          Compute tthe erms in the illumination equation:
+//            Ambient..
+              vec4 ambient = uLights[i].ambientColor * uMaterial.ambientColor;
+
+//            Diffuse..
+              float Kd = max(dot(L[i], N), 0.0);
+              vec4 diffuse = Kd * uLights[i].diffuseColor * uMaterial.diffuseColor;
+
+//            Specular..
+              vec3 H = normalize(L[i] + V);   // Halfway Vector.
+              float Ks = pow( max(dot(N, H), 0.0), uMaterial.shininess);
+              vec4 specular = Ks *  uLights[i].specularColor * uMaterial.specularColor;
+              if( dot(L[i], N) < 0.0 ) {
+                specular = vec4(0.0, 0.0, 0.0, 1.0);
+              }
+              color = color + ambient + diffuse + specular;
+            }
+          }
+        }
+    }
+    color.a = uMaterial.emissiveColor.a;
+    vColor = color;
+  }
+</script>
+
+<script id="fragment-shader" type="x-shader/x-fragment">
+  #version 300 es
+  precision highp float;
+
+  struct MaterialProperties {
+    vec4 ambientColor;
+    vec4 diffuseColor;
+    vec4 specularColor;
+    vec4 emissiveColor;     // emissiveColor.a is alpha for the fragment
+    float shininess;
+  };
+
+  struct LightProperties {
+    bool enabled;
+    vec4 position;
+    vec4 ambientColor;
+    vec4 diffuseColor;
+    vec4 specularColor;
+  };
+
+  in vec4 vColor;
+  in vec2 vTexCoord;
+  in vec3 L[3],V,N;
+
+  uniform sampler2D uTexMap;
+  uniform bool uTexEnabled;
+  uniform bool uVertexShading;
+  uniform MaterialProperties uMaterial;
+  uniform LightProperties uLights[3];
+
+  out vec4 fColor;
+
+  void main() {
+      vec4 color = vColor;
+      vec3 M;
+      if(uTexEnabled){
+          vec4 MM = texture(uTexMap, vTexCoord);
+          M =  normalize(2.0*MM.xyz-1.0);
+      }
+      else {
+          M = normalize(N);
+      }
+      if(uVertexShading==false){
+        for (int i = 0; i<3; i++){
+          if (uLights[i].enabled){
+//            Compute terms in the illumination equation:
+//            Ambient..
+              vec4 ambient = uLights[i].ambientColor * uMaterial.ambientColor;
+//            Diffuse..
+              vec3 LL = normalize(L[i]);
+              float Kd = max(dot(M,LL), 0.0);
+              vec4 diffuse = Kd * uLights[i].diffuseColor * uMaterial.diffuseColor;
+//            Specular..
+              vec3 H = normalize(LL + normalize(V));   // Halfway Vector.
+              float Ks = pow( max(dot(M, H), 0.0), uMaterial.shininess);
+              vec4 specular = Ks * uLights[i].specularColor * uMaterial.specularColor;
+              if( dot(M, LL) < 0.0 ) specular = vec4(0.0, 0.0, 0.0, 1.0);
+              color += ambient + diffuse + specular;
+            //  color += ambient + diffuse;
+          }
+        }
+      }
+      color.a = uMaterial.emissiveColor.a;
+      fColor = color;
+  }
+</script>
+
+<script src="../Common/initShaders.js"></script>
+<script src="../Common/MVnew.js"></script>
+<script src="../Common/cylinder.js"></script>
+<script src="../Common/myGeometry.js"></script>
+<script src="Homework1.js"></script>
+</body>
+</html>
